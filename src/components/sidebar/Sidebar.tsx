@@ -4,6 +4,7 @@ import {
   LayoutDashboard, 
   Trophy, 
   Users,
+  ClipboardCheck,
   SlidersHorizontal, 
   Settings,
   Menu,
@@ -16,6 +17,7 @@ const navItems = [
   { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
   { icon: Trophy, label: 'Leaderboard', path: '/leaderboard' },
   { icon: Users, label: 'Attendance', path: '/attendance' },
+  { icon: ClipboardCheck, label: 'BOC', path: '/boc' },
   { icon: SlidersHorizontal, label: 'Weight Config', path: '/weights' },
   { icon: Settings, label: 'Settings', path: '/settings' },
 ];

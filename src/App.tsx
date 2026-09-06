@@ -7,6 +7,7 @@ import WeightConfiguration from './pages/WeightConfiguration';
 import Settings from './pages/Settings';
 import ManpowerDetail from './pages/ManpowerDetail';
 import AttendanceScore from './pages/AttendanceScore';
+import BocPage from './pages/Boc';
 import { Toaster } from 'react-hot-toast';
 
 function App() {
@@ -18,6 +19,7 @@ function App() {
           <Route index element={<Dashboard />} />
           <Route path="leaderboard" element={<Leaderboard />} />
           <Route path="attendance" element={<AttendanceScore />} />
+          <Route path="boc" element={<BocPage />} />
           <Route path="manpower/:id" element={<ManpowerDetail />} />
           <Route path="weights" element={<WeightConfiguration />} />
           <Route path="settings" element={<Settings />} />
