@@ -15,6 +15,8 @@ export const AppLayout: React.FC = () => {
     // Initialize theme
     if (theme === 'dark') {
       document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
     }
   }, [loadData, theme]);
 

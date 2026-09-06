@@ -2,10 +2,9 @@ import React, { useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import { 
   LayoutDashboard, 
-  Activity, 
   Trophy, 
+  Users,
   SlidersHorizontal, 
-  ServerCrash, 
   Settings,
   Menu,
   X,
@@ -15,10 +14,9 @@ import { cn } from '../../utils/cn';
 
 const navItems = [
   { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
-  { icon: Activity, label: 'API Scores', path: '/api-scores' },
   { icon: Trophy, label: 'Leaderboard', path: '/leaderboard' },
+  { icon: Users, label: 'Attendance', path: '/attendance' },
   { icon: SlidersHorizontal, label: 'Weight Config', path: '/weights' },
-  { icon: ServerCrash, label: 'API Status', path: '/api-status' },
   { icon: Settings, label: 'Settings', path: '/settings' },
 ];
 

@@ -17,14 +17,12 @@ export default function Dashboard() {
     const overallAvg = scores.reduce((acc, curr) => acc + curr.overallScore, 0) / totalManpower;
     const highest = Math.max(...scores.map(s => s.overallScore));
     const lowest = Math.min(...scores.map(s => s.overallScore));
-    const healthyApis = apis.filter(a => a.status === 'healthy').length;
 
     return {
       overallAvg: overallAvg.toFixed(1),
       totalManpower,
       highest: highest.toFixed(1),
-      lowest: lowest.toFixed(1),
-      apiHealth: `${healthyApis}/${apis.length}`
+      lowest: lowest.toFixed(1)
     };
   }, [scores, apis]);
 
@@ -78,12 +76,11 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <KpiCard title="Overall Score" value={kpis.overallAvg} icon={Target} trend="+4.2%" trendUp />
         <KpiCard title="Total Manpower" value={kpis.totalManpower} icon={Users} />
         <KpiCard title="Highest Score" value={kpis.highest} icon={TrendingUp} className="text-success" />
         <KpiCard title="Lowest Score" value={kpis.lowest} icon={TrendingDown} className="text-destructive" />
-        <KpiCard title="API Health" value={kpis.apiHealth} icon={Activity} />
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -164,7 +161,16 @@ export default function Dashboard() {
   );
 }
 
-function KpiCard({ title, value, icon: Icon, trend, trendUp, className }: any) {
+interface KpiCardProps {
+  title: string;
+  value: string | number;
+  icon: React.ElementType;
+  trend?: string;
+  trendUp?: boolean;
+  className?: string;
+}
+
+function KpiCard({ title, value, icon: Icon, trend, trendUp, className }: KpiCardProps) {
   return (
     <Card>
       <CardContent className="p-6 flex flex-col justify-between h-full">
