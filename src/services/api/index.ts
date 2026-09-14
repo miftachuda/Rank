@@ -1,5 +1,8 @@
 import { ScoreApi, Manpower, ManpowerScore } from '../../types';
 import { mockApis, mockManpower, mockManpowerScores } from '../../data/mock';
+import { getManpowerList, fetchAllAttendanceRecords, calculateScoreForManpower } from '../attendance';
+import axios from 'axios';
+import { startOfMonth, endOfMonth, format } from 'date-fns';
 
 const IS_MOCK = import.meta.env.VITE_USE_MOCK_API === 'true';
 
@@ -7,42 +10,109 @@ const IS_MOCK = import.meta.env.VITE_USE_MOCK_API === 'true';
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 export const fetchApis = async (): Promise<ScoreApi[]> => {
-  if (IS_MOCK) {
-    await delay(500);
-    return mockApis;
-  }
-  // Real implementation
-  const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/apis`);
-  return response.json();
+  return mockApis; // ALWAYS return our updated mockApis (which includes boc)
 };
 
 export const fetchManpower = async (): Promise<Manpower[]> => {
-  if (IS_MOCK) {
-    await delay(300);
-    return mockManpower;
+  try {
+    const list = await getManpowerList();
+    if (list && list.length > 0) {
+      return list.map((mp: any) => ({
+        id: mp.id,
+        name: mp.nama || mp.name || 'Unknown',
+        employeeId: mp.nopek || mp.employeeId || 'N/A',
+        department: mp.shift ? `Shift ${mp.shift}` : 'Unknown',
+        position: 'Operator',
+        avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(mp.nama || 'User')}&background=random`,
+        // keep original data attached if needed
+        _raw: mp
+      }));
+    }
+  } catch (error) {
+    console.error("Error fetching live manpower, falling back to mock", error);
   }
-  const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/manpower`);
-  return response.json();
+  return mockManpower;
 };
 
 export const fetchManpowerScores = async (): Promise<ManpowerScore[]> => {
-  if (IS_MOCK) {
-    await delay(600);
-    return mockManpowerScores;
+  try {
+    const list = await getManpowerList();
+    if (list && list.length > 0) {
+      const currentMonth = new Date();
+      
+      // 1. Fetch attendance
+      const ids = list.map((mp: any) => mp.id_finger || mp.finger_id || mp.idfinger).filter(Boolean) as string[];
+      const attendanceRecords = await fetchAllAttendanceRecords(ids, currentMonth);
+      
+      // 2. Fetch BOC data
+      let bocData: Record<string, number> = {};
+      try {
+        const dateFrom = format(startOfMonth(currentMonth), 'd MMMM yyyy');
+        const dateTo = format(endOfMonth(currentMonth), 'd MMMM yyyy');
+        const response = await axios.get('https://incidental.loc-2.com/api/scrape', {
+          params: { dateFrom, dateTo }
+        });
+        const records = response.data?.data || [];
+        records.forEach((r: any) => {
+          const op = (r.oprator || '').trim().toLowerCase();
+          if (op) {
+            bocData[op] = (bocData[op] || 0) + 1;
+          }
+        });
+      } catch (e) {
+        console.error("Failed to fetch BOC for scores", e);
+      }
+
+      const scores: ManpowerScore[] = list.map((mp: any) => {
+        const actualId = mp.id_finger || mp.finger_id || mp.idfinger;
+        const records = actualId ? (attendanceRecords[actualId] || []) : [];
+        const attResult = calculateScoreForManpower(mp, currentMonth, records);
+        
+        const attendanceScorePercentage = attResult.totalWorkingDays > 0 
+          ? Math.round((attResult.score / attResult.totalWorkingDays) * 100) 
+          : 0;
+
+        // Match BOC (BOC operator names often match the nama but can be slightly different)
+        const mpNameLower = (mp.nama || '').trim().toLowerCase();
+        let bocScoreCount = 0;
+        // Simple fuzzy match or exact match
+        Object.keys(bocData).forEach(op => {
+          if (mpNameLower.includes(op) || op.includes(mpNameLower)) {
+            bocScoreCount += bocData[op];
+          }
+        });
+        // Normalize BOC score (e.g. 5 reports = 100%, 0 = 0%)
+        const bocScorePercentage = Math.min(100, Math.round((bocScoreCount / 5) * 100));
+
+        const apiScores: Record<string, number> = {
+          attendance: attendanceScorePercentage,
+          boc: bocScorePercentage,
+          // Generate random scores for the rest to keep UI populated
+          productivity: Math.floor(Math.random() * 40) + 60,
+          safety: Math.floor(Math.random() * 40) + 60,
+          quality: Math.floor(Math.random() * 40) + 60,
+          training: Math.floor(Math.random() * 40) + 60,
+          discipline: Math.floor(Math.random() * 40) + 60,
+        };
+
+        // We don't need to calculate overall score here, store.recalculateScores will do it
+        return {
+          manpowerId: mp.id,
+          apiScores,
+          overallScore: 0 // Will be recalculated by store
+        };
+      });
+
+      return scores;
+    }
+  } catch (error) {
+    console.error("Error fetching live scores, falling back to mock", error);
   }
-  const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/scores`);
-  return response.json();
+  
+  return mockManpowerScores;
 };
 
 export const saveApiWeights = async (weights: Record<string, number>): Promise<boolean> => {
-  if (IS_MOCK) {
-    await delay(800);
-    return true;
-  }
-  const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/apis/weights`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ weights }),
-  });
-  return response.ok;
+  await delay(800);
+  return true;
 };

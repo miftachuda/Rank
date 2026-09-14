@@ -86,13 +86,70 @@ export const getManpowerList = async (): Promise<Manpower[]> => {
 
 export interface AttendanceRecord {
   id: string;
-  timestamp: string; // Assuming API returns timestamp, maybe need to check the exact field
-  // other fields ignored
+  timestamp: string;
   datetime?: string;
   date?: string;
   time?: string;
   created?: string;
 }
+
+export interface Justification {
+  id?: string;
+  id_finger: string;
+  date: string;
+  type: 'cuti' | 'dinas' | 'sakit' | 'ijin' | 'gate_error';
+}
+
+export const fetchJustifications = async (monthDate: Date): Promise<Record<string, Record<string, {id: string, type: string}>>> => {
+  const startStr = format(startOfMonth(monthDate), 'yyyy-MM-dd');
+  const endStr = format(endOfMonth(monthDate), 'yyyy-MM-dd');
+  
+  try {
+    const records = await pb.collection('attendance_justifications').getFullList({
+      filter: `date >= "${startStr}" && date <= "${endStr}"`,
+    });
+    
+    // structure: { "id_finger": { "YYYY-MM-DD": { id: "recordId", type: "cuti" } } }
+    const result: Record<string, Record<string, {id: string, type: string}>> = {};
+    records.forEach(r => {
+      if (!result[r.id_finger]) result[r.id_finger] = {};
+      result[r.id_finger][r.date.substring(0, 10)] = { id: r.id, type: r.type };
+    });
+    return result;
+  } catch (error) {
+    console.error("Failed to fetch justifications:", error);
+    return {};
+  }
+};
+
+export const saveJustification = async (id_finger: string, startDateStr: string, endDateStr: string, type: string) => {
+  const [sY, sM, sD] = startDateStr.split('-').map(Number);
+  const [eY, eM, eD] = endDateStr.split('-').map(Number);
+  
+  // Set time to noon to avoid any Daylight Saving Time jump issues
+  let current = new Date(sY, sM - 1, sD, 12, 0, 0);
+  const end = new Date(eY, eM - 1, eD, 12, 0, 0);
+  
+  // We must execute sequentially (await in loop) instead of Promise.all
+  // PocketBase uses SQLite which can lock and drop requests if hammered concurrently!
+  while (current <= end) {
+    const dateStr = format(current, 'yyyy-MM-dd');
+    try {
+      await pb.collection('attendance_justifications').create({
+        id_finger,
+        date: dateStr,
+        type
+      });
+    } catch (err) {
+      console.error(`Error creating justification for ${dateStr}:`, err);
+    }
+    current = addDays(current, 1);
+  }
+};
+
+export const deleteJustification = async (id: string) => {
+  await pb.collection('attendance_justifications').delete(id);
+};
 
 export interface DailyDetail {
   date: Date;
@@ -101,6 +158,8 @@ export interface DailyDetail {
   windowEnd: Date | null;
   actualEntries: Date[];
   scored: boolean;
+  justification?: string;
+  justificationId?: string;
 }
 
 export interface ScoreResult {
@@ -133,7 +192,12 @@ export const fetchAllAttendanceRecords = async (ids: string[], monthDate: Date):
   }
 };
 
-export const calculateScoreForManpower = (manpower: Manpower, monthDate: Date, rawRecords: any[] = []): ScoreResult => {
+export const calculateScoreForManpower = (
+  manpower: Manpower, 
+  monthDate: Date, 
+  rawRecords: any[] = [],
+  justifications: Record<string, {id: string, type: string}> = {}
+): ScoreResult => {
   const start = startOfMonth(monthDate);
   const end = endOfMonth(monthDate);
 
@@ -166,6 +230,9 @@ export const calculateScoreForManpower = (manpower: Manpower, monthDate: Date, r
     let entryWindowEnd: Date | null = null;
     let scored = false;
     let actualEntriesForShift: Date[] = [];
+    
+    const dateStr = format(currentDay, 'yyyy-MM-dd');
+    const dayJustification = justifications[dateStr];
     
     if (shift !== 'Off') {
       totalWorkingDays += 1;
@@ -200,11 +267,16 @@ export const calculateScoreForManpower = (manpower: Manpower, monthDate: Date, r
       // All entries for UI display
       actualEntriesForShift = entryTimes.filter(time => time >= entryWindowStart! && time <= displayWindowEnd);
       
-      // Scored is true ONLY if there's an entry within the strict valid clock-in window
-      const validEntries = entryTimes.filter(time => time >= entryWindowStart! && time <= entryWindowEnd!);
-      if (validEntries.length > 0) {
+      if (dayJustification) {
         scored = true;
         score += 1;
+      } else {
+        // Scored is true ONLY if there's an entry within the strict valid clock-in window
+        const validEntries = entryTimes.filter(time => time >= entryWindowStart! && time <= entryWindowEnd!);
+        if (validEntries.length > 0) {
+          scored = true;
+          score += 1;
+        }
       }
     } else {
       // If it's a day Off, don't show any entries
@@ -219,7 +291,9 @@ export const calculateScoreForManpower = (manpower: Manpower, monthDate: Date, r
       windowStart, // Use actual shift start
       windowEnd,   // Use actual shift end
       actualEntries: actualEntriesForShift,
-      scored
+      scored,
+      justification: dayJustification?.type,
+      justificationId: dayJustification?.id
     });
     
     currentDay = addDays(currentDay, 1);

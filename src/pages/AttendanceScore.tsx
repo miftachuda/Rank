@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { format, subMonths, addMonths } from 'date-fns';
 import { ChevronLeft, ChevronRight, Search, X, CheckCircle2, XCircle } from 'lucide-react';
-import { getManpowerList, fetchAllAttendanceRecords, calculateScoreForManpower, Manpower, DailyDetail } from '../services/attendance';
+import { getManpowerList, fetchAllAttendanceRecords, calculateScoreForManpower, Manpower, DailyDetail, fetchJustifications, saveJustification, deleteJustification } from '../services/attendance';
 import toast from 'react-hot-toast';
 
 interface ManpowerScore extends Manpower {
   score: number;
   totalWorkingDays: number;
   details: DailyDetail[];
+  percentage: number;
 }
 
 const AttendanceScore: React.FC = () => {
@@ -16,6 +17,15 @@ const AttendanceScore: React.FC = () => {
   const [manpowerData, setManpowerData] = useState<ManpowerScore[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedManpower, setSelectedManpower] = useState<ManpowerScore | null>(null);
+  
+  const [showJustificationModal, setShowJustificationModal] = useState(false);
+  const [justificationForm, setJustificationForm] = useState({
+    manpowerId: '',
+    type: 'cuti',
+    startDate: '',
+    endDate: ''
+  });
+  const [isSavingJustification, setIsSavingJustification] = useState(false);
 
   const fetchData = async () => {
     setLoading(true);
@@ -23,7 +33,7 @@ const AttendanceScore: React.FC = () => {
       const list = await getManpowerList();
       
       if (list.length === 0) {
-        toast.error('No manpower data found in PocketBase or fetch failed. Check console.');
+        toast.error('No manpower data found in the database or fetch failed. Check console.');
         setManpowerData([]);
         setLoading(false);
         return;
@@ -35,16 +45,26 @@ const AttendanceScore: React.FC = () => {
         .filter(Boolean) as string[];
 
       // Fetch all attendance records at once
-      const allRecords = await fetchAllAttendanceRecords(ids, currentMonth);
+      const [allRecords, allJustifications] = await Promise.all([
+        fetchAllAttendanceRecords(ids, currentMonth),
+        fetchJustifications(currentMonth)
+      ]);
 
       const scoredList = list.map((mp) => {
         const actualId = mp.id_finger || (mp as any).finger_id || (mp as any).idfinger;
         const records = actualId ? (allRecords[actualId] || []) : [];
-        const result = calculateScoreForManpower(mp, currentMonth, records);
-        return { ...mp, score: result.score, totalWorkingDays: result.totalWorkingDays, details: result.details };
+        const justifications = actualId ? (allJustifications[actualId] || {}) : {};
+        const result = calculateScoreForManpower(mp, currentMonth, records, justifications);
+        const percentage = result.totalWorkingDays > 0 ? Math.round((result.score / result.totalWorkingDays) * 100) : 0;
+        return { ...mp, score: result.score, totalWorkingDays: result.totalWorkingDays, details: result.details, percentage };
       });
       
-      scoredList.sort((a, b) => b.score - a.score);
+      scoredList.sort((a, b) => {
+        if (b.percentage !== a.percentage) {
+          return b.percentage - a.percentage;
+        }
+        return b.score - a.score;
+      });
       setManpowerData(scoredList);
     } catch (error) {
       console.error(error);
@@ -60,6 +80,53 @@ const AttendanceScore: React.FC = () => {
 
   const prevMonth = () => setCurrentMonth(subMonths(currentMonth, 1));
   const nextMonth = () => setCurrentMonth(addMonths(currentMonth, 1));
+
+  const handleDeleteJustification = async (id: string) => {
+    if (window.confirm('Are you sure you want to remove this justification?')) {
+      try {
+        await deleteJustification(id);
+        toast.success('Justification removed');
+        fetchData(); // refresh data
+      } catch (err) {
+        toast.error('Failed to remove justification');
+      }
+    }
+  };
+
+  const handleSaveJustification = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!justificationForm.manpowerId || !justificationForm.startDate || !justificationForm.endDate) {
+      toast.error('Please fill in all fields');
+      return;
+    }
+    
+    setIsSavingJustification(true);
+    try {
+      const mp = manpowerData.find(m => m.id === justificationForm.manpowerId);
+      const actualId = mp?.id_finger || (mp as any)?.finger_id || (mp as any)?.idfinger;
+      
+      if (!actualId) {
+        toast.error('Selected manpower has no Finger ID mapped.');
+        return;
+      }
+      
+      await saveJustification(
+        actualId,
+        justificationForm.startDate,
+        justificationForm.endDate,
+        justificationForm.type
+      );
+      
+      toast.success('Justification saved successfully');
+      setShowJustificationModal(false);
+      fetchData(); // Refresh data
+    } catch (error) {
+      console.error(error);
+      toast.error('Failed to save justification');
+    } finally {
+      setIsSavingJustification(false);
+    }
+  };
 
   const filteredData = manpowerData.filter(mp => 
     mp.nama.toLowerCase().includes(searchQuery.toLowerCase()) || 
@@ -101,6 +168,12 @@ const AttendanceScore: React.FC = () => {
             />
           </div>
           
+          <button 
+            onClick={() => setShowJustificationModal(true)}
+            className="w-full sm:w-auto px-4 py-2 bg-secondary text-secondary-foreground rounded-md hover:bg-secondary/80 transition-colors text-sm font-medium"
+          >
+            Add Justification
+          </button>
           <button 
             onClick={fetchData}
             disabled={loading}
@@ -171,7 +244,7 @@ const AttendanceScore: React.FC = () => {
                       <span className="text-xs text-muted-foreground ml-1">/ {mp.totalWorkingDays}</span>
                     </td>
                     <td className="px-6 py-4 text-right font-medium">
-                      {mp.totalWorkingDays > 0 ? Math.round((mp.score / mp.totalWorkingDays) * 100) : 0}%
+                      {mp.percentage}%
                     </td>
                   </tr>
                 ))
@@ -188,7 +261,7 @@ const AttendanceScore: React.FC = () => {
               <div>
                 <h3 className="text-xl font-bold">{selectedManpower.nama}</h3>
                 <p className="text-sm text-muted-foreground">
-                  NOPEK: {selectedManpower.nopek} | Shift Group: {selectedManpower.shift} | Score: <span className="font-bold text-primary-600 dark:text-primary-400">{selectedManpower.score} / {selectedManpower.totalWorkingDays}</span> ({selectedManpower.totalWorkingDays > 0 ? Math.round((selectedManpower.score / selectedManpower.totalWorkingDays) * 100) : 0}%)
+                  NOPEK: {selectedManpower.nopek} | Shift Group: {selectedManpower.shift} | Score: <span className="font-bold text-primary-600 dark:text-primary-400">{selectedManpower.score} / {selectedManpower.totalWorkingDays}</span> ({selectedManpower.percentage}%)
                 </p>
               </div>
               <button 
@@ -235,7 +308,20 @@ const AttendanceScore: React.FC = () => {
                         )}
                       </td>
                       <td className="px-4 py-3 text-xs">
-                        {detail.actualEntries.length > 0 ? (
+                        {detail.justification ? (
+                          <div className="flex items-center gap-2">
+                            <span className="inline-flex px-2 py-0.5 rounded text-xs font-bold bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 capitalize">
+                              {detail.justification.replace('_', ' ')}
+                            </span>
+                            <button 
+                              onClick={() => handleDeleteJustification(detail.justificationId!)}
+                              className="text-destructive hover:bg-destructive/10 p-1 rounded-full transition-colors"
+                              title="Delete Justification"
+                            >
+                              <X size={14} />
+                            </button>
+                          </div>
+                        ) : detail.actualEntries.length > 0 ? (
                           <div className="flex flex-col gap-1">
                             {detail.actualEntries.map((entry, eIdx) => (
                               <span key={eIdx} className="text-foreground font-medium">
@@ -261,6 +347,95 @@ const AttendanceScore: React.FC = () => {
                 </tbody>
               </table>
             </div>
+          </div>
+        </div>
+      )}
+      {showJustificationModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70">
+          <div className="bg-card text-card-foreground w-full max-w-md rounded-xl shadow-2xl flex flex-col border border-border">
+            <div className="flex items-center justify-between p-4 border-b">
+              <h3 className="text-lg font-bold">Add Manual Justification</h3>
+              <button 
+                onClick={() => setShowJustificationModal(false)}
+                className="p-2 hover:bg-muted text-muted-foreground hover:text-foreground rounded-full transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            
+            <form onSubmit={handleSaveJustification} className="p-4 space-y-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Manpower</label>
+                <select 
+                  required
+                  value={justificationForm.manpowerId}
+                  onChange={(e) => setJustificationForm(prev => ({ ...prev, manpowerId: e.target.value }))}
+                  className="w-full p-2 bg-background border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                >
+                  <option value="">Select Manpower</option>
+                  {manpowerData.map(mp => (
+                    <option key={mp.id} value={mp.id}>{mp.nama} ({mp.nopek})</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Justification Type</label>
+                <select 
+                  required
+                  value={justificationForm.type}
+                  onChange={(e) => setJustificationForm(prev => ({ ...prev, type: e.target.value }))}
+                  className="w-full p-2 bg-background border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                >
+                  <option value="cuti">Cuti (Leave)</option>
+                  <option value="dinas">Dinas (Official Duty)</option>
+                  <option value="sakit">Sakit (Sick)</option>
+                  <option value="ijin">Ijin (Permission)</option>
+                  <option value="gate_error">Gate Tapping Error</option>
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Start Date</label>
+                  <input 
+                    type="date"
+                    required
+                    value={justificationForm.startDate}
+                    onChange={(e) => setJustificationForm(prev => ({ ...prev, startDate: e.target.value }))}
+                    className="w-full p-2 bg-background border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">End Date</label>
+                  <input 
+                    type="date"
+                    required
+                    min={justificationForm.startDate}
+                    value={justificationForm.endDate}
+                    onChange={(e) => setJustificationForm(prev => ({ ...prev, endDate: e.target.value }))}
+                    className="w-full p-2 bg-background border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  />
+                </div>
+              </div>
+
+              <div className="pt-4 flex justify-end gap-2">
+                <button 
+                  type="button"
+                  onClick={() => setShowJustificationModal(false)}
+                  className="px-4 py-2 border rounded-md hover:bg-muted text-sm font-medium transition-colors"
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit"
+                  disabled={isSavingJustification}
+                  className="px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 disabled:opacity-50 text-sm font-medium transition-colors"
+                >
+                  {isSavingJustification ? 'Saving...' : 'Save Justification'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

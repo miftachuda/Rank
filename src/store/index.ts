@@ -43,6 +43,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         fetchManpowerScores()
       ]);
       set({ apis, manpower, scores, isLoading: false });
+      get().recalculateScores();
     } catch (err: any) {
       set({ error: err.message || 'Failed to load data', isLoading: false });
     }
