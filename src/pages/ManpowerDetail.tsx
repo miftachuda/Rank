@@ -117,16 +117,16 @@ export default function ManpowerDetail() {
               </CardContent>
             </Card>
 
-            <Card className="bg-warning/5 border-warning/20">
+            <Card className="bg-destructive/5 border-destructive/20">
               <CardHeader className="pb-2">
-                <CardTitle className="text-warning-foreground text-sm uppercase tracking-wider">Needs Improvement</CardTitle>
+                <CardTitle className="text-destructive text-sm uppercase tracking-wider">Needs Improvement</CardTitle>
               </CardHeader>
               <CardContent>
                 <ul className="space-y-3">
                   {weaknesses.map(s => (
                     <li key={s.subject} className="flex justify-between items-center">
                       <span className="font-medium">{s.subject}</span>
-                      <span className="font-bold text-warning-foreground">{s.A}</span>
+                      <span className="font-bold text-destructive">{s.A}</span>
                     </li>
                   ))}
                 </ul>

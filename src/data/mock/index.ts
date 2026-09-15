@@ -7,7 +7,7 @@ export const mockApis: ScoreApi[] = [
     description: 'Tracks employee presence, punctuality, and leaves.',
     endpoint: '/api/v1/attendance',
     status: 'healthy',
-    weight: 0.50,
+    weight: 0.40,
     enabled: true,
     lastUpdated: new Date().toISOString(),
     responseTime: 120,
@@ -19,10 +19,22 @@ export const mockApis: ScoreApi[] = [
     description: 'BOC Reports Scoring.',
     endpoint: '/api/v1/boc',
     status: 'healthy',
-    weight: 0.50,
+    weight: 0.35,
     enabled: true,
     lastUpdated: new Date().toISOString(),
     responseTime: 200,
+    parameters: []
+  },
+  {
+    id: 'peka',
+    name: 'PEKA',
+    description: 'PEKA Observation Scoring.',
+    endpoint: '/api/v1/peka',
+    status: 'healthy',
+    weight: 0.25,
+    enabled: true,
+    lastUpdated: new Date().toISOString(),
+    responseTime: 150,
     parameters: []
   }
 ];

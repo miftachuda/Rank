@@ -63,6 +63,28 @@ export const fetchManpowerScores = async (): Promise<ManpowerScore[]> => {
         console.error("Failed to fetch BOC for scores", e);
       }
 
+      // 3. Fetch PEKA data
+      const pekaMap: Record<string, number> = {};
+      try {
+        const pekaResponse = await axios.get('https://peka.loc-2.com/peka2');
+        let pekaRecords: any[] = [];
+        if (Array.isArray(pekaResponse.data)) {
+          pekaRecords = pekaResponse.data;
+        } else if (pekaResponse.data && Array.isArray(pekaResponse.data.data)) {
+          pekaRecords = pekaResponse.data.data;
+        }
+        pekaRecords.forEach(r => {
+          const jumlahNum = Number(r.Jumlah || r.jumlah || r.JUMLAH || 0);
+          const identitasRaw = r.Identitas || r.identitas || r.IDENTITAS || '';
+          const identitas = String(identitasRaw).trim().toUpperCase();
+          if (identitas && identitas !== '-') {
+            pekaMap[identitas] = (pekaMap[identitas] || 0) + jumlahNum;
+          }
+        });
+      } catch (e) {
+        console.error("Failed to fetch PEKA for scores", e);
+      }
+
       const scores: ManpowerScore[] = list.map((mp: any) => {
         const actualId = mp.id_finger || mp.finger_id || mp.idfinger;
         const records = actualId ? (attendanceRecords[actualId] || []) : [];
@@ -84,9 +106,16 @@ export const fetchManpowerScores = async (): Promise<ManpowerScore[]> => {
         // Normalize BOC score (e.g. 5 reports = 100%, 0 = 0%)
         const bocScorePercentage = Math.min(100, Math.round((bocScoreCount / 5) * 100));
 
+        // PEKA calculation
+        const nopekRaw = mp.nopek || mp.NOPEK || '';
+        const mpNopek = String(nopekRaw).trim().toUpperCase();
+        const jumlahPeka = pekaMap[mpNopek] || 0;
+        const pekaScorePercentage = Math.min(jumlahPeka * 10, 100);
+
         const apiScores: Record<string, number> = {
           attendance: attendanceScorePercentage,
           boc: bocScorePercentage,
+          peka: pekaScorePercentage,
           // Generate random scores for the rest to keep UI populated
           productivity: Math.floor(Math.random() * 40) + 60,
           safety: Math.floor(Math.random() * 40) + 60,
