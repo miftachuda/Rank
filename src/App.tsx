@@ -9,6 +9,7 @@ import ManpowerDetail from './pages/ManpowerDetail';
 import AttendanceScore from './pages/AttendanceScore';
 import BocPage from './pages/Boc';
 import PekaPage from './pages/Peka';
+import LearningHourPage from './pages/LearningHour';
 import { Toaster } from 'react-hot-toast';
 
 function App() {
@@ -22,6 +23,8 @@ function App() {
           <Route path="attendance" element={<AttendanceScore />} />
           <Route path="boc" element={<BocPage />} />
           <Route path="peka" element={<PekaPage />} />
+          {/* Learning Hour Route */}
+          <Route path="learning" element={<LearningHourPage />} />
           <Route path="manpower/:id" element={<ManpowerDetail />} />
           <Route path="weights" element={<WeightConfiguration />} />
           <Route path="settings" element={<Settings />} />

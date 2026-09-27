@@ -10,7 +10,8 @@ import {
   Menu,
   X,
   ChevronLeft,
-  ShieldAlert
+  ShieldAlert,
+  BookOpen
 } from 'lucide-react';
 import { cn } from '../../utils/cn';
 
@@ -20,6 +21,7 @@ const navItems = [
   { icon: Users, label: 'Attendance', path: '/attendance' },
   { icon: ClipboardCheck, label: 'BOC', path: '/boc' },
   { icon: ShieldAlert, label: 'PEKA', path: '/peka' },
+  { icon: BookOpen, label: 'Learning', path: '/learning' },
   { icon: SlidersHorizontal, label: 'Weight Config', path: '/weights' },
   { icon: Settings, label: 'Settings', path: '/settings' },
 ];

@@ -1,6 +1,7 @@
 import { ScoreApi, Manpower, ManpowerScore } from '../../types';
 import { mockApis, mockManpower, mockManpowerScores } from '../../data/mock';
-import { getManpowerList, fetchAllAttendanceRecords, calculateScoreForManpower } from '../attendance';
+import { getManpowerList, fetchAllAttendanceRecords, calculateScoreForManpower, fetchJustifications } from '../attendance';
+import { fetchLearningHours } from '../learning';
 import axios from 'axios';
 import { startOfMonth, endOfMonth, format } from 'date-fns';
 
@@ -40,9 +41,14 @@ export const fetchManpowerScores = async (): Promise<ManpowerScore[]> => {
     if (list && list.length > 0) {
       const currentMonth = new Date();
       
-      // 1. Fetch attendance
-      const ids = list.map((mp: any) => mp.id_finger || mp.finger_id || mp.idfinger).filter(Boolean) as string[];
-      const attendanceRecords = await fetchAllAttendanceRecords(ids, currentMonth);
+      // 1. Fetch attendance and justifications and learning hours
+      const ids = list.map((mp: any) => mp.id_finger || mp.finger_id || mp.idfinger || mp.nopek).filter(Boolean) as string[];
+      const monthStr = format(currentMonth, 'yyyy-MM');
+      const [attendanceRecords, allJustifications, learningData] = await Promise.all([
+        fetchAllAttendanceRecords(ids, currentMonth),
+        fetchJustifications(currentMonth),
+        fetchLearningHours(monthStr)
+      ]);
       
       // 2. Fetch BOC data
       let bocData: Record<string, number> = {};
@@ -86,9 +92,10 @@ export const fetchManpowerScores = async (): Promise<ManpowerScore[]> => {
       }
 
       const scores: ManpowerScore[] = list.map((mp: any) => {
-        const actualId = mp.id_finger || mp.finger_id || mp.idfinger;
+        const actualId = mp.id_finger || mp.finger_id || mp.idfinger || mp.nopek;
         const records = actualId ? (attendanceRecords[actualId] || []) : [];
-        const attResult = calculateScoreForManpower(mp, currentMonth, records);
+        const justifications = actualId ? (allJustifications[actualId] || {}) : {};
+        const attResult = calculateScoreForManpower(mp, currentMonth, records, justifications);
         
         const attendanceScorePercentage = attResult.totalWorkingDays > 0 
           ? Math.round((attResult.score / attResult.totalWorkingDays) * 100) 
@@ -112,10 +119,16 @@ export const fetchManpowerScores = async (): Promise<ManpowerScore[]> => {
         const jumlahPeka = pekaMap[mpNopek] || 0;
         const pekaScorePercentage = Math.min(jumlahPeka * 10, 100);
 
+        // Learning Hours calculation
+        const learningRecord = learningData[actualId];
+        const learningHours = learningRecord ? learningRecord.hours : 0;
+        const learningScorePercentage = Math.min(learningHours * 10, 100);
+
         const apiScores: Record<string, number> = {
           attendance: attendanceScorePercentage,
           boc: bocScorePercentage,
           peka: pekaScorePercentage,
+          learning: learningScorePercentage,
           // Generate random scores for the rest to keep UI populated
           productivity: Math.floor(Math.random() * 40) + 60,
           safety: Math.floor(Math.random() * 40) + 60,

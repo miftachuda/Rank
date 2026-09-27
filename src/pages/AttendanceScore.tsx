@@ -41,7 +41,7 @@ const AttendanceScore: React.FC = () => {
 
       // Collect all IDs for bulk fetch
       const ids = list
-        .map(mp => mp.id_finger || (mp as any).finger_id || (mp as any).idfinger)
+        .map(mp => mp.id_finger || (mp as any).finger_id || (mp as any).idfinger || mp.nopek)
         .filter(Boolean) as string[];
 
       // Fetch all attendance records at once
@@ -51,7 +51,7 @@ const AttendanceScore: React.FC = () => {
       ]);
 
       const scoredList = list.map((mp) => {
-        const actualId = mp.id_finger || (mp as any).finger_id || (mp as any).idfinger;
+        const actualId = mp.id_finger || (mp as any).finger_id || (mp as any).idfinger || mp.nopek;
         const records = actualId ? (allRecords[actualId] || []) : [];
         const justifications = actualId ? (allJustifications[actualId] || {}) : {};
         const result = calculateScoreForManpower(mp, currentMonth, records, justifications);
